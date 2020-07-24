@@ -1,0 +1,472 @@
+class ball:public TShape{                      //球類別 繼承TShape;
+  private:
+    int speedx,speedy;                         //速度
+    int power;                                 //球的威力值
+    void __fastcall move(TObject *Sender);     //OnTimer函式 使球移動 判斷碰撞
+  public:
+    ball();                                    //建構函式
+    __fastcall ~ball();                        //解構函式
+    TTimer *engine;                            //TTimer
+    static int dele[];                         //用來記住被刪掉的磚塊
+    static int deleN;                          //消除的磚塊數
+    static int baN;                            //球的數量
+    static int bloNN;                          //現在的檔板數
+    static int bloN;                           //已產生過的檔板數
+    static int delebaN;                        //現在的球數
+    static bool deleB;                         //是否為已死亡的磚塊
+    static int deleblo[];                      //用來記住被刪掉的檔板
+    static int delebloN;                       //現在的檔板數
+    static bool deleBlo;                       //是否為已死亡的檔板
+    void op();                                 //多球 加速 多檔板
+};
+int ball::baN(1);
+int ball::dele[77];
+int ball::deleN(0);
+bool ball::deleB(false);
+bool ball::deleBlo(false);
+int ball::bloN(1);
+int ball::bloNN(1);
+int ball::deleblo[20];
+int ball::delebloN(0);
+int ball::delebaN(1);
+
+class brick:public TShape{                     //磚塊類別 繼承TShape
+  private:
+
+  public:
+    int hp;                                    //磚塊生命值
+    static int brN;                            //全磚塊數量
+    brick();                                   //建構函式
+    __fastcall ~brick();                       //解構函式
+};
+int brick::brN(77);
+
+class block:public TShape{                     //檔板類別 繼承TShape
+  private:
+
+  public:
+    int life;                                  //檔板承受火力
+    block();                                   //建構函式
+    __fastcall ~block();                       //解構函式
+};
+
+
+//---------------------------------------------------------------------------
+
+#include <vcl.h>
+#pragma hdrstop
+
+#include "Unit1.h"
+//---------------------------------------------------------------------------
+#pragma package(smart_init)
+#pragma resource "*.dfm"
+TForm1 *Form1;
+brick *br[77];     //磚塊
+block *blo[10];    //檔板
+ball *ba[1000];    //球
+bool start=false;  //判斷遊戲是否開始
+//---------------------------------------------------------------------------
+__fastcall TForm1::TForm1(TComponent* Owner)
+        : TForm(Owner)
+{
+}
+//---------------------------------------------------------------------------
+
+brick::brick():TShape(Form1){
+  Parent=Form1->Panel1;              //磚塊在Panel1中顯示
+  Pen->Style=psInsideFrame;
+  Pen->Width=5;
+  Height=35;
+  Width=70;
+
+  hp=random(3)+1;                    //隨機生命值
+  switch (hp){
+    case 1:
+      Brush->Color=clYellow;
+      break;
+    case 2:
+      Brush->Color=clRed;
+      break;
+    case 3:
+      Brush->Color=clMaroon;
+      break;
+  }
+}
+
+__fastcall brick::~brick(){
+
+}
+
+
+ball::ball():TShape(Form1){
+  Parent=Form1->Panel1;                   //球在Panel1中顯示
+  Brush->Color=clRed;
+  Shape=stCircle;
+  Height=20;
+  Width=20;
+  Top=blo[0]->Top-18;                    //高度位置在第一個檔板上面
+
+  engine=new TTimer(Form1);              //新增Timer engine
+  engine->OnTimer=move;                  //OnTimer事件函式寫在move中
+  engine->Interval=1;                    //每隔0.001秒跑一次Timer
+  engine->Enabled=false;                 //一開始Timer關掉
+
+  speedx=2;                             //速度2
+  speedy=-2;
+  power=1;                              //球威力值=1
+}
+
+__fastcall ball::~ball(){
+  delete engine;                        //刪掉engine
+}
+
+block::block():TShape(Form1){
+  Parent=Form1->Panel1;                 //檔板在Panel1中顯示
+  Brush->Color=clGreen;
+  Pen->Style=psInsideFrame;
+  Pen->Width=5;
+  Width=80;
+  Height=20;
+  Top=Form1->Panel1->Height-22;         //高度位置在Panel1底部
+
+  life=2;                               //檔板承受度=2
+
+}
+
+__fastcall block::~block(){
+
+}
+
+void __fastcall ball::move(TObject *Sender){
+   if(Top<=0) speedy=-speedy;                                                                 //球碰到上面邊界反彈
+   if(Left+Width>=Form1->Panel1->Width||Left<=0) speedx=-speedx;                              //左右邊界反彈
+   if(Top>=Form1->Panel1->Height){                                                            //球掉下去
+     Enabled=false;                                                                           //功能關掉
+     engine->Enabled=false;                                                                   //Timer關掉
+     Top=Form1->Panel1->Top-100;                                                              //先放到Panel1上面
+     delebaN--;                                                                               //目前球數-1
+   }
+
+   for(int i=0;i<br[0]->brN;i++){                                                               //判斷所有磚塊有沒有被撞到
+     for(int m=0;m<deleN;m++){                                                                  //判斷是否為已刪除的磚塊
+       if(dele[m]==i) deleB=true;
+     }
+     if(deleB){                                                                                 //若為已刪除的磚塊 跳過不繼續判斷碰撞
+       deleB=false;
+       continue;
+     }
+
+     if(Top<br[i]->Top&&Top+20>=br[i]->Top&&Left<=br[i]->Left+65&&Left>=br[i]->Left-15){        //球的位置在磚塊上方 且 球觸碰到磚塊 且 球在此磚塊左右範圍之內
+       if(speedy>0){
+         speedy=-speedy;                                                                        //高度=負高度 反彈
+         br[i]->hp-=power;                                                                      //磚塊剩餘生命值
+         if(br[i]->hp<=0){                                                                      //若磚塊生命值小於等於0 刪除磚塊 並執行OP函式(球 檔板增強)
+           delete br[i];                                                                        //將被刪除的磚塊用陣列記住
+           br[i]=NULL;
+           dele[deleN++]=i;
+           op();
+         }else{
+           if(br[i]->hp==2) br[i]->Brush->Color=clRed;                                          //2血 磚塊紅色
+           if(br[i]->hp==1) br[i]->Brush->Color=clYellow;                                       //1血 磚塊黃色
+         }
+       }
+     }else{
+       if(Top+20>br[i]->Top+35&&Top<=br[i]->Top+35&&Left<=br[i]->Left+65&&Left>=br[i]->Left-15){   //球的位置在磚塊下方 且 球觸碰到磚塊 且 球在此磚塊左右範圍之內
+         if(speedy<0){
+           speedy=-speedy;
+           br[i]->hp-=power;
+           if(br[i]->hp<=0){
+             delete br[i];
+             br[i]=NULL;
+             dele[deleN++]=i;
+             op();                                                                                  //同上
+           }else{
+             if(br[i]->hp==2) br[i]->Brush->Color=clRed;
+             if(br[i]->hp==1) br[i]->Brush->Color=clYellow;
+           }
+         }
+       }else{
+         if(Left<br[i]->Left&&Left+20>=br[i]->Left&&Top<br[i]->Top+30&&Top>br[i]->Top-15){          //球的位置在磚塊左方 且 球觸碰到磚塊 且 球在此磚塊上下範圍之內
+           if(speedx>0){
+             speedx=-speedx;
+             br[i]->hp-=power;
+             if(br[i]->hp<=0){
+               delete br[i];
+               br[i]=NULL;
+               dele[deleN++]=i;                                                                     //同上
+               op();
+             }else{
+               if(br[i]->hp==2) br[i]->Brush->Color=clRed;
+               if(br[i]->hp==1) br[i]->Brush->Color=clYellow;
+             }
+           }
+         }else{
+           if(Left+20>br[i]->Left+70&&Left<=br[i]->Left+70&&Top<br[i]->Top+30&&Top>br[i]->Top-15){  //球的位置在磚塊右方 且 球觸碰到磚塊 且 球在此磚塊上下範圍之內
+             if(speedx<0){
+               speedx=-speedx;
+               br[i]->hp-=power;
+               if(br[i]->hp<=0){
+                 delete br[i];
+                 br[i]=NULL;
+                 dele[deleN++]=i;                                                                   //同上
+                 op();
+               }else{
+                 if(br[i]->hp==2) br[i]->Brush->Color=clRed;
+                 if(br[i]->hp==1) br[i]->Brush->Color=clYellow;
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   for(int i=0;i<ba[0]->bloN;i++){                                                                                         //檢查是否為已判定死亡的檔板
+     for(int m=0;m<delebloN;m++){                                                                                          //若是 跳過不繼續往下判斷
+       if(deleblo[m]==i) deleBlo=true;
+     }
+     if(deleBlo){
+       deleBlo=false;
+       continue;
+     }
+
+     if(Top<blo[i]->Top&&Top+20>=blo[i]->Top&&Left<=blo[i]->Left+blo[i]->Width&&Left>=blo[i]->Left-Width/2){               //球的位置在檔板上方 且 球觸碰到檔板 且 球在此檔板左右範圍之內
+       if(speedy>0){
+         speedy=-speedy;                                                                                                   //高度相反 往反方向移動
+         if(blo[i]->life<=power){                                                                                          //若檔板承受火力小於球的威力 消除檔板
+           blo[i]->Visible=false;                                                                                          //先隱藏起來 並用陣列記住已消除的檔板
+           deleblo[delebloN++]=i;
+           bloNN--;
+         }
+       }
+     }else{
+       if(Top+20>blo[i]->Top+20&&Top<=blo[i]->Top+20&&Left<=blo[i]->Left+blo[i]->Height&&Left>=blo[i]->Left-Width/2){      //球的位置在檔板下方 且 球觸碰到檔板 且 球在此檔板左右範圍之內
+         if(speedy<0){
+           speedy=-speedy;
+           if(blo[i]->life<=power){
+             blo[i]->Visible=false;
+             deleblo[delebloN++]=i;                                                                                        //同上
+             bloNN--;
+           }
+         }
+       }else{
+         if(Left<blo[i]->Left&&Left+Width>=blo[i]->Left&&Top<blo[i]->Top+20&&Top>blo[i]->Top-Height/2){                    //球的位置在檔板左方 且 球觸碰到檔板 且 球在此檔板上下範圍之內
+           if(speedx>0){
+             speedx=-speedx;
+             if(blo[i]->life<=power){
+               blo[i]->Visible=false;                                                                                      //同上
+               deleblo[delebloN++]=i;
+               bloNN--;
+             }
+           }
+         }else{
+           if(Left+20>blo[i]->Left+blo[i]->Width&&Left<=blo[i]->Left+blo[i]->Width&&Top<blo[i]->Top+20&&Top>blo[i]->Top-Height/2){   //球的位置在檔板右方 且 球觸碰到檔板 且 球在此檔板上下範圍之內
+             if(speedx<0){
+               speedx=-speedx;
+               if(blo[i]->life<=power){
+                 blo[i]->Visible=false;                                                                                              //同上
+                 deleblo[delebloN++]=i;
+                 bloNN--;
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+
+   Top+=speedy; Left+=speedx;                    //球的移動 speedxy為移動速度
+   if(deleN==77){                                //如果全部的磚塊都被刪除 顯示獲勝
+     for(int i=0;i<baN;i++){
+       ba[i]->engine->Enabled=false;
+     }
+     engine->Enabled=false;
+     ShowMessage("YA~恭喜你獲勝囉!!!");
+   }
+
+   if(bloNN==0||delebaN==0){                     //如果沒有擋板或沒有球了 顯示敗北
+     for(int i=0;i<baN;i++){
+       ba[i]->engine->Enabled=false;
+     }
+     ShowMessage("你輸啦~再來一局吧");
+   }
+}
+
+void ball::op(){
+  int a=random(3);                                          //有1/3的機會獲得一種能力
+  if(a==0){
+    int x=random(baN);                                     //場上的隨機一顆球
+    switch (random(7)){
+      case 0:
+        for(int i=baN;i<baN+3;i++){                        //新增三顆威力為1的普通球
+          ba[i]=new ball();
+          ba[i]->engine->Enabled=true;
+          ba[i]->Left=random(Form1->Panel1->Width-100);
+          ba[i]->Top=random(Form1->Panel1->Top)+400;
+        }
+        baN+=3;
+        delebaN+=3;
+        break;
+      case 1:
+        for(int i=baN;i<baN+2;i++){                        //新增兩顆威力為2 半徑較大的藍色球
+          ba[i]=new ball();
+          ba[i]->power=2;
+          ba[i]->engine->Enabled=true;
+          ba[i]->Left=random(Form1->Panel1->Width-100);
+          ba[i]->Top=random(Form1->Panel1->Top)+400;
+          ba[i]->Brush->Color=clBlue;
+          ba[i]->Width=25;
+          ba[i]->Height=25;
+        }
+        baN+=2;
+        delebaN+=2;
+        break;
+      case 2:
+        ba[baN]=new ball();                                //新增一顆威力為3 半徑較大的紫色球
+        ba[baN]->power=3;
+        ba[baN]->engine->Enabled=true;
+        ba[baN]->Left=random(Form1->Panel1->Width-100);
+        ba[baN]->Top=random(Form1->Panel1->Top)+400;
+        ba[baN]->Brush->Color=clPurple;
+        ba[baN]->Width=30;
+        ba[baN]->Height=30;
+        baN++;
+        delebaN++;
+        break;
+      case 3:
+        ba[x]->speedx=ba[x]->speedx*4;                     //某顆球的速度改為四倍
+        ba[x]->speedy=ba[x]->speedy*4;
+        break;
+      case 4:
+        ba[x]->speedx=ba[x]->speedx/2;                     //某顆球的速度減慢兩倍
+        ba[x]->speedy=ba[x]->speedy/2;
+        break;
+      case 5:
+        blo[bloN]=new block();                             //新增一個檔板在原來擋板上面
+        blo[bloN]->Top=blo[0]->Top-21*bloNN;
+        blo[bloN]->Left=blo[0]->Left-20;
+        blo[bloN]->Width=120;
+        int b=random(2);
+        if(b==0){                                          //最硬的檔板 藍色 檔板承受力3
+          blo[bloN]->life=3;
+          blo[bloN]->Brush->Color=clBlue;
+        }else{
+          blo[bloN]->life=2;                               //水藍 檔板承受力2 PS:檔板承受力必須大於球的威力才可承受住
+          blo[bloN]->Brush->Color=clAqua;
+        }
+        bloN++;
+        bloNN++;
+    }
+  }
+}
+
+void __fastcall TForm1::FormCreate(TObject *Sender)
+{
+  randomize();
+  int L=0,T=0;
+  for(int i=0;i<77;i++){                                   //創造77個磚塊
+    br[i]=new brick();
+    if(L*70>=Panel1->Width){L=0;T++;}                      //第一列排滿後 L歸零 T高加加
+    br[i]->Left=(L++)*70;                                  //由左往右排列
+    br[i]->Top=35*T;                                       //磚塊的高度
+  }
+  blo[0]=new block();                                      //新增原始檔板
+  ba[0]=new ball();                                        //新增原始球
+}
+//---------------------------------------------------------------------------
+void __fastcall TForm1::Panel1MouseMove(TObject *Sender, TShiftState Shift,
+      int X, int Y)
+{
+  blo[0]->Left=X;                                          //檔板的位置由滑鼠左右移動控制
+  for(int i=1;i<ba[0]->bloN;i++){                          //後來新增的檔板也一樣由滑鼠控制 -20使其位置置中
+    blo[i]->Left=X-20;
+  }
+  if(start==false) ba[0]->Left=X+30;                       //遊戲還沒開始時 球在擋板上方跟著檔板移動
+}
+//---------------------------------------------------------------------------
+void __fastcall TForm1::Panel1Click(TObject *Sender)
+{
+  start=true;                                              //遊戲開始 球射出
+  ba[0]->engine->Enabled=true;
+
+}
+//---------------------------------------------------------------------------
+void __fastcall TForm1::Button1Click(TObject *Sender)
+{
+  for(int i=0;i<ba[0]->baN;i++){
+    ba[i]->engine->Enabled=false;                          //刪除所有球
+    delete ba[i];
+    ba[i]=NULL;
+  }
+
+  for(int i=0;i<ba[0]->bloN;i++){                          //刪除所有檔板
+    delete blo[i];
+    blo[i]=NULL;
+  }
+
+  for(int i=0;i<77;i++){
+    for(int m=0;m<ba[0]->deleN;m++){
+       if(ba[0]->dele[m]==i) ba[0]->deleB=true;            //刪除遊戲中剩下的磚塊
+     }
+     if(ba[0]->deleB){
+       ba[0]->deleB=false;
+       continue;
+     }
+     delete br[i];
+     br[i]=NULL;
+  }
+
+
+  int L=0,T=0;
+  for(int i=0;i<77;i++){                                   //產生77個磚塊
+    br[i]=new brick();                                     //遊戲重新開始 與上方產生磚塊程式碼同
+    if(L*70>=Panel1->Width){L=0;T++;}
+    br[i]->Left=(L++)*70;
+    br[i]->Top=35*T;
+  }
+  blo[0]=new block();
+  ba[0]=new ball();
+
+  ba[0]->baN=1;
+  ba[0]->deleN=0;
+  ba[0]->deleB=false;
+  ba[0]->deleBlo=false;
+  ba[0]->bloN=1;
+  ba[0]->bloNN=1;
+  ba[0]->delebloN=0;
+  ba[0]->delebaN=1;
+
+  start=false;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TForm1::FormDestroy(TObject *Sender)
+{
+  for(int i=0;i<ba[0]->baN;i++){
+    ba[i]->engine->Enabled=false;                          //視窗關閉後 刪除球 檔板 剩下未刪除的磚塊
+    delete ba[i];
+    ba[i]=NULL;
+  }
+
+  for(int i=0;i<ba[0]->bloN;i++){
+    delete blo[i];
+    blo[i]=NULL;
+  }
+
+  for(int i=0;i<77;i++){
+    for(int m=0;m<ba[0]->deleN;m++){
+       if(ba[0]->dele[m]==i) ba[0]->deleB=true;
+     }
+     if(ba[0]->deleB){
+       ba[0]->deleB=false;                         
+       continue;
+     }
+     delete br[i];
+     br[i]=NULL;
+  }
+}
+//---------------------------------------------------------------------------
+
+當初剛學class與繼承的時候完全不了解，但從一開始的小作業(產生球並使其碰撞反彈)到打磚塊，循序漸進現在對於使用class與繼承產生動態物件已經頗有心得，
+雖然還不敢說完全理解並能活用，但已經感覺到自己進步很多，每次剛學新東西都是一頭霧水，小考也寫不太出來，經歷過作業的磨練，慢慢思考，能有效率的把它學會。
+這個作業過程中最困難的就是判斷磚塊的碰撞吧，想了3個多小時才把它寫出來，不過整個作業都自己完成就是很爽。或許我不是個適合考試的類型，我的頭腦沒有其他人
+轉那麼快，但給我時間我一樣能把程式寫好。
